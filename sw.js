@@ -1,9 +1,9 @@
 // Guarda o app no aparelho para abrir sem internet.
-const VERSION = "ritmo-v2";
+const VERSION = "ritmo-v3";
 const SHELL = [
   "./", "index.html", "css/app.css", "manifest.webmanifest",
-  "js/app.js", "js/store.js", "js/ui.js", "js/rotina.js", "js/assistir.js", "js/espanhol.js", "js/ajustes.js",
-  "js/data-videos.js", "js/data-espanhol.js", "js/data-curso.js", "js/voz.js",
+  "js/app.js", "js/store.js", "js/ui.js", "js/rotina.js", "js/tarefas.js", "js/assistir.js", "js/ajustes.js",
+  "js/data-videos.js", "js/voz.js",
   "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png",
 ];
 
@@ -13,7 +13,7 @@ self.addEventListener("install", (e) => {
 
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== "ritmo-audio").map((k) => caches.delete(k)))).then(() => self.clients.claim()),
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()),
   );
 });
 
@@ -29,12 +29,5 @@ self.addEventListener("fetch", (e) => {
         .catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match("index.html"))),
     );
     return;
-  }
-
-  // Fontes: cache primeiro.
-  if (url.host === "fonts.googleapis.com" || url.host === "fonts.gstatic.com") {
-    e.respondWith(
-      caches.match(e.request).then((hit) => hit || fetch(e.request).then((r) => { const copy = r.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); return r; })),
-    );
   }
 });

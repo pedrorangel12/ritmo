@@ -1,13 +1,13 @@
 {
   "name": "Ritmo",
   "short_name": "Ritmo",
-  "description": "Rotina, vídeos para aprender e espanhol, num lugar só.",
+  "description": "Rotina, tarefas e lembretes, num lugar só.",
   "lang": "pt-BR",
   "start_url": "./#hoje",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#F4F6FA",
-  "theme_color": "#F4F6FA",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },

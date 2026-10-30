@@ -6,7 +6,7 @@ import { attachMic, micButtonHtml } from "./voz.js";
 
 const FILTERS = [
   ["tudo", "Tudo"], ["historia", "História"], ["filosofia", "Filosofia"], ["ciencia", "Ciência"],
-  ["geopolitica", "Geopolítica"], ["es", "Em espanhol"], ["salvos", "Salvos"], ["vistos", "Assistidos"],
+  ["geopolitica", "Geopolítica"], ["salvos", "Salvos"], ["vistos", "Assistidos"],
 ];
 const PAGE = 10; // Quantos vídeos aparecem antes do aviso de pausa.
 
@@ -16,13 +16,11 @@ let facts = null;
 
 const allVideos = () => [...S.watch.custom, ...VIDEOS];
 
-export function setFilter(f) { filter = f; shown = PAGE; }
 
 function ordered() {
   const seed = Number(dayKey().replace(/-/g, ""));
   let list = shuffle(allVideos(), seed);
-  if (filter === "es") list = list.filter((v) => v.l === "es");
-  else if (filter === "salvos") list = list.filter((v) => S.watch.saved[v.id]);
+  if (filter === "salvos") list = list.filter((v) => S.watch.saved[v.id]);
   else if (filter === "vistos") list = list.filter((v) => S.watch.seen[v.id]);
   else if (filter !== "tudo") list = list.filter((v) => v.t === filter);
   if (filter !== "vistos") list.sort((a, b) => !!S.watch.seen[a.id] - !!S.watch.seen[b.id]);
@@ -98,7 +96,7 @@ export function renderAssistir(root) {
     ${list.length > shown ? `
       <div class="endcard">
         <b style="font-family:var(--display);font-size:20px">Pausa para respirar</b>
-        <span class="muted">Você já passou por ${shown} vídeos. Escolha um para assistir de verdade, ou faça 5 min de espanhol.</span>
+        <span class="muted">Você já passou por ${shown} vídeos. Escolha um e assista de verdade, ou volte para as suas tarefas.</span>
         <button class="btn" id="more">Mostrar mais ${Math.min(PAGE, list.length - shown)}</button>
       </div>` : ""}
   `;
@@ -133,7 +131,6 @@ function videoCard(v) {
       <div class="thumb">
         <img src="https://i.ytimg.com/vi/${esc(v.id)}/hqdefault.jpg" alt="" loading="lazy">
         ${v.d ? `<span class="dur">${fmtDur(v.d)}</span>` : ""}
-        ${v.l === "es" ? `<span class="lang">ES</span>` : ""}
         ${S.watch.seen[v.id] ? `<span class="seen">Assistido</span>` : ""}
       </div>
       <div class="vmeta"><b>${esc(v.title)}</b><span>${esc(v.c)} · ${TOPICS[v.t] || "Outro"}${S.watch.saved[v.id] ? " · salvo" : ""}</span></div>
@@ -146,7 +143,7 @@ function openPlayer(v) {
   const ov = overlay(`
     <div class="ov-top">
       <button class="icon-btn" data-x="close" aria-label="Fechar">${ICON.back}</button>
-      <span class="eyebrow">${TOPICS[v.t] || ""}${v.l === "es" ? " · em espanhol" : ""}</span>
+      <span class="eyebrow">${TOPICS[v.t] || ""}</span>
       <span style="width:40px"></span>
     </div>
     <div class="player">
@@ -179,7 +176,7 @@ function openPlayer(v) {
       saveNotes();
       // Conta o tempo com o vídeo aberto como aprendizado (no máximo a duração do vídeo).
       const mins = Math.min((Date.now() - opened) / 60000, v.d || 180);
-      if (mins >= 1) addLearn(v.l === "es" ? "es" : "video", mins);
+      if (mins >= 1) addLearn("video", mins);
       ov.close();
     } else if (x === "seen") {
       update((s) => { if (s.watch.seen[v.id]) delete s.watch.seen[v.id]; else s.watch.seen[v.id] = Date.now(); });
@@ -195,7 +192,7 @@ function openPlayer(v) {
     }
   });
   $("#notes", ov.el).addEventListener("blur", saveNotes);
-  attachMic($(".mic", ov.el), $("#notes", ov.el), { lang: v.l === "es" ? "es-ES" : "pt-BR", append: true, onFinal: saveNotes });
+  attachMic($(".mic", ov.el), $("#notes", ov.el), { append: true, onFinal: saveNotes });
 }
 
 /* ---------- Adicionar vídeo por link ---------- */
@@ -211,7 +208,6 @@ function openAdd() {
     <p class="muted small">Cole o link de um vídeo do YouTube. No app do YouTube: Compartilhar → Copiar link.</p>
     <div class="field"><label for="a-url">Link</label><input class="input" id="a-url" inputmode="url" autocomplete="off" placeholder="https://youtu.be/..."></div>
     <div class="field"><span class="lbl">Tema</span><div class="chips wrap" id="a-topic">${Object.entries(TOPICS).map(([k, l]) => `<button class="chip" data-t="${k}" aria-pressed="${k === topic}">${l}</button>`).join("")}</div></div>
-    <label class="row" style="align-items:center;gap:10px;flex:none"><input type="checkbox" id="a-es" style="width:22px;height:22px;flex:none"> <span>O vídeo é em espanhol</span></label>
     <div class="field"><label for="a-min">Duração aproximada (min)</label><input class="input" id="a-min" type="number" inputmode="numeric" placeholder="Ex.: 45"></div>
     <button class="btn pri block" id="a-save">Adicionar</button>
   `);
@@ -232,7 +228,7 @@ function openAdd() {
       const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent("https://www.youtube.com/watch?v=" + id)}`);
       if (r.ok) { const j = await r.json(); title = j.title || title; channel = j.author_name || channel; }
     } catch (e) { /* sem internet: fica com o título genérico */ }
-    update((st) => st.watch.custom.unshift({ id, t: topic, l: $("#a-es", el).checked ? "es" : "pt", d: Number($("#a-min", el).value) || 0, c: channel, title, custom: true }));
+    update((st) => st.watch.custom.unshift({ id, t: topic, d: Number($("#a-min", el).value) || 0, c: channel, title, custom: true }));
     s.close();
     toast("Vídeo adicionado");
   };

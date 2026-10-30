@@ -3,9 +3,9 @@ import { subscribe } from "./store.js";
 import { $, $$ } from "./ui.js";
 import { renderHoje, renderHabitos } from "./rotina.js";
 import { renderAssistir } from "./assistir.js";
-import { renderEspanhol } from "./espanhol.js";
+import { renderTarefas } from "./tarefas.js";
 
-const VIEWS = { hoje: renderHoje, assistir: renderAssistir, espanhol: renderEspanhol, habitos: renderHabitos };
+const VIEWS = { hoje: renderHoje, tarefas: renderTarefas, assistir: renderAssistir, habitos: renderHabitos };
 let current = VIEWS[location.hash.slice(1)] ? location.hash.slice(1) : "hoje";
 
 // Troca de aba (ou redesenha a atual, mantendo a rolagem).

@@ -3,12 +3,12 @@ import { S, update, dayKey, addDays, weekday, dayLog, activitiesOn, consistency,
 import { esc, $, $$, ICON, sheet, overlay, toast, fmtDur, nowMinutes, toMin, beep } from "./ui.js";
 import { go } from "./app.js";
 import { suggestion as videoSuggestion, todayFact, openFact } from "./assistir.js";
-import { dueCount, startLesson } from "./espanhol.js";
+import { tasksForToday, taskRow, bindTaskRows } from "./tarefas.js";
 import { openSettings } from "./ajustes.js";
 
 const WD = ["D", "S", "T", "Q", "Q", "S", "S"];
 const WD_LONG = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const MONTHS = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 const status = (id, key = dayKey()) => S.log[key]?.a?.[id];
 
@@ -34,9 +34,15 @@ function pickNow(list) {
 
 function planHtml(a) {
   const parts = [];
-  if (a.when && a.then) parts.push(`<div><span class="w">Quando eu</span> ${esc(a.when)}, <span class="w">eu vou</span> ${esc(a.then)}.</div>`);
-  if (a.ifObs && a.thenObs) parts.push(`<div><span class="w">Se eu</span> ${esc(a.ifObs)}, <span class="w">então</span> ${esc(a.thenObs)}.</div>`);
+  if (a.when && a.then) parts.push(`<p><span class="w">Quando eu</span> ${esc(a.when)}, <span class="w">eu vou</span> ${esc(a.then)}.</p>`);
+  if (a.ifObs && a.thenObs) parts.push(`<p><span class="w">Se eu</span> ${esc(a.ifObs)}, <span class="w">então</span> ${esc(a.thenObs)}.</p>`);
   return parts.length ? `<div class="plan">${parts.join("")}</div>` : "";
+}
+
+function openLink(a) {
+  if (a.link === "tarefas") go("tarefas");
+  else if (a.link === "assistir") go("assistir");
+  else openFocus(a);
 }
 
 /* ================= HOJE ================= */
@@ -44,9 +50,8 @@ export function renderHoje(root) {
   const today = dayKey();
   const d = new Date();
   const list = activitiesOn(today);
+  const tasks = tasksForToday();
   const doneN = list.filter((a) => isDone(status(a.id))).length;
-  const learn = dayLog().learn;
-  const learnMin = Math.round((learn.video || 0) + (learn.es || 0));
   const now = pickNow(list);
   const focusAct = S.focus && S.activities.find((a) => a.id === S.focus.id);
 
@@ -59,138 +64,124 @@ export function renderHoje(root) {
 
   const groups = {};
   list.forEach((a) => (groups[periodOf(a.time)] ||= []).push(a));
-
   const sug = videoSuggestion();
-  const due = dueCount();
+  const pct = list.length ? Math.round((doneN / list.length) * 100) : 0;
 
   root.innerHTML = `
     <header class="head">
-      <div>
-        <span class="eyebrow">${WD_LONG[d.getDay()]} · ${d.getDate()} ${MONTHS[d.getMonth()]}</span>
-        <h1>Hoje</h1>
-      </div>
+      <div><span class="eyebrow">${WD_LONG[d.getDay()].replace(/^./, (c) => c.toUpperCase())}, ${d.getDate()} de ${MONTHS[d.getMonth()]}</span><h1>Hoje</h1></div>
       <button class="icon-btn" id="settings" aria-label="Ajustes">${ICON.gear}</button>
     </header>
 
-    ${isIOS && !standalone ? `<div class="banner"><b>Instale o Ritmo no iPhone</b><span class="small">No Safari, toque em Compartilhar e depois em <b>Adicionar à Tela de Início</b>. Assim ele abre em tela cheia e funciona sem internet.</span></div>` : ""}
+    ${isIOS && !standalone ? `<div class="notice"><b>Instale o Ritmo</b><span>No Safari, toque em Compartilhar e depois em Adicionar à Tela de Início.</span></div>` : ""}
 
-    <div class="section">
-      <div class="bar"><i style="width:${list.length ? (doneN / list.length) * 100 : 0}%"></i></div>
-      <span class="small muted">${doneN} de ${list.length} feitos${learnMin ? ` · ${learnMin} min aprendendo hoje` : ""}</span>
+    <div class="progress">
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <span>${doneN} de ${list.length} da rotina</span>
     </div>
 
     ${focusAct ? nowCard(focusAct, "foco") : now ? nowCard(now.act, now.kind) : `
-      <div class="now-card calm"><span class="eyebrow">Dia cumprido</span><h2>Nada pendente agora.</h2><p class="muted">Bom momento para um vídeo ou uma lição curta.</p></div>`}
+      <div class="now calm"><span class="now-label">Tudo em dia</span><h2>Nada pendente na rotina agora.</h2></div>`}
 
-    ${missed ? `<div class="note"><b>Ontem não rolou: ${esc(missed.title)}.</b><span>Um dia não desfaz nada. Hoje é o dia que conta${missed.min ? `: a versão mínima é “${esc(missed.min)}”` : ""}.</span></div>` : ""}
+    ${missed ? `<div class="notice"><b>Ontem não rolou: ${esc(missed.title)}.</b><span>Um dia não desfaz nada. Hoje é o que conta${missed.min ? `: a versão mínima é “${esc(missed.min)}”` : ""}.</span></div>` : ""}
 
-    ${S.exampleRoutine ? `<div class="banner"><b>Essa é uma rotina de exemplo</b><span class="small">Troque pelos seus horários reais na aba Hábitos. Toque numa atividade para ver o plano dela.</span><div class="row"><button class="btn pri" id="edit-routine">Editar minha rotina</button><button class="btn" id="dismiss-example">Entendi</button></div></div>` : ""}
+    ${S.exampleRoutine ? `<div class="notice"><b>Rotina de exemplo</b><span>Troque pelos seus horários reais em Hábitos.</span><div class="row"><button class="btn pri" id="edit-routine">Editar rotina</button><button class="btn" id="dismiss-example">Entendi</button></div></div>` : ""}
 
-    <section class="section">
-      <div class="section-title"><h2>Em vez do Instagram</h2></div>
-      <div class="quick">
-        <button class="tile" id="q-es">
-          <span class="k">${ICON.chat}</span><b>Espanhol</b><span>${due ? `${due} para revisar · ` : ""}lição de 5 min</span>
-        </button>
-        <button class="tile" id="q-video">
-          <span class="k">${ICON.play}</span><b>Assistir</b><span>${sug ? esc(sug.title) : "Vídeos longos para aprender"}</span>
-        </button>
-        <button class="tile wide" id="q-fact" hidden>
-          <span class="k">${ICON.spark}</span><b id="fact-title">Neste dia</b><span id="fact-text"></span>
-        </button>
-      </div>
+    <section class="group">
+      <div class="group-head"><h2 class="group-title">Tarefas de hoje</h2><button class="text-btn" id="go-tasks">${tasks.length ? "Ver todas" : "Adicionar"}</button></div>
+      ${tasks.length ? `<div class="list">${tasks.map(taskRow).join("")}</div>` : `<p class="empty-line">Nenhuma tarefa para hoje.</p>`}
     </section>
 
-    <section class="section">
-      <div class="section-title"><h2>Rotina</h2><button class="small" style="color:var(--accent);font-weight:700" id="go-habits">Editar</button></div>
+    <section class="group">
+      <div class="group-head"><h2 class="group-title">Rotina</h2><button class="text-btn" id="go-habits">Editar</button></div>
       ${Object.keys(PERIODS).filter((p) => groups[p]).map((p) => `
-        <span class="period">${PERIODS[p]}</span>
-        <div class="tl">${groups[p].map((a) => blockHtml(a, (now?.kind === "agora" && now.act.id === a.id) || focusAct?.id === a.id)).join("")}</div>
-      `).join("") || `<p class="muted">Nada planejado para hoje. Crie atividades na aba Hábitos.</p>`}
+        <span class="list-label">${PERIODS[p]}</span>
+        <div class="list">${groups[p].map((a) => blockHtml(a, (now?.kind === "agora" && now.act.id === a.id) || focusAct?.id === a.id)).join("")}</div>
+      `).join("") || `<p class="empty-line">Nada planejado para hoje.</p>`}
+    </section>
+
+    <section class="group">
+      <h2 class="group-title">Em vez do Instagram</h2>
+      <div class="list">
+        <button class="row-item link" id="q-video"><span class="row-icon">${ICON.play}</span><span class="row-body"><span class="row-title">Assistir algo longo</span><span class="row-sub">${sug ? esc(sug.title) : "Vídeos para aprender"}</span></span><span class="chev">›</span></button>
+        <button class="row-item link" id="q-fact" hidden><span class="row-icon">${ICON.spark}</span><span class="row-body"><span class="row-title" id="fact-title">Neste dia</span><span class="row-sub" id="fact-text"></span></span><span class="chev">›</span></button>
+      </div>
     </section>
   `;
 
   $("#settings", root).onclick = openSettings;
   $("#go-habits", root).onclick = () => go("habitos");
-  $("#q-es", root).onclick = () => startLesson();
+  $("#go-tasks", root).onclick = () => go("tarefas");
   $("#q-video", root).onclick = () => go("assistir");
   $("#edit-routine", root) && ($("#edit-routine", root).onclick = () => { update((s) => (s.exampleRoutine = false)); go("habitos"); });
   $("#dismiss-example", root) && ($("#dismiss-example", root).onclick = () => update((s) => (s.exampleRoutine = false)));
 
   const nowBtn = $("#now-start", root);
-  if (nowBtn) nowBtn.onclick = () => {
-    const a = S.activities.find((x) => x.id === nowBtn.dataset.id);
-    if (a.link === "espanhol" && !S.focus) return startLesson(a.id);
-    openFocus(a);
-  };
+  if (nowBtn) nowBtn.onclick = () => openLink(S.activities.find((x) => x.id === nowBtn.dataset.id));
   const nowMin = $("#now-min", root);
   if (nowMin) nowMin.onclick = () => { setStatus(nowMin.dataset.id, "min"); toast("Versão mínima conta. Feito!"); };
 
-  $$(".blk", root).forEach((b) => {
-    const a = S.activities.find((x) => x.id === b.dataset.id);
-    $(".chk", b).onclick = (e) => {
-      e.stopPropagation();
+  $$("[data-act]", root).forEach((row) => {
+    const a = S.activities.find((x) => x.id === row.dataset.act);
+    $(".chk", row).onclick = () => {
       const st = status(a.id);
       setStatus(a.id, isDone(st) ? null : "done");
       if (!isDone(st)) toast(`${a.title}: feito`);
     };
-    $(".c", b).onclick = () => openActivity(a);
+    $(".row-body", row).onclick = () => openActivity(a);
   });
+  bindTaskRows(root);
 
   todayFact().then((f) => {
-    const tile = $("#q-fact", root);
-    if (!f || !tile) return;
-    tile.hidden = false;
+    const row = $("#q-fact", root);
+    if (!f || !row) return;
+    row.hidden = false;
     $("#fact-title", root).textContent = `Neste dia, em ${f.year}`;
     $("#fact-text", root).textContent = f.text;
-    tile.onclick = () => openFact(f);
+    row.onclick = () => openFact(f);
   });
 }
 
 function nowCard(a, kind) {
-  const label = { agora: "Agora", proxima: `Próxima · ${a.time}`, pendente: `Ficou para trás · ${a.time}`, foco: "Em foco" }[kind];
-  let action = "Começar foco";
-  if (kind === "foco") {
-    const left = Math.max(0, Math.round((S.focus.endAt - Date.now()) / 60000));
-    action = `Voltar ao foco · ${left} min`;
-  } else if (a.link === "espanhol") action = "Abrir lição";
-  else if (!a.dur) action = "Abrir";
+  const label = { agora: "Agora", proxima: `A seguir · ${a.time}`, pendente: `Ficou para trás · ${a.time}`, foco: "Em foco" }[kind];
+  let action = a.link === "tarefas" ? "Abrir tarefas" : a.link === "assistir" ? "Abrir vídeos" : "Começar foco";
+  if (kind === "foco") action = `Voltar ao foco · ${Math.max(0, Math.round((S.focus.endAt - Date.now()) / 60000))} min`;
   return `
-    <div class="now-card">
-      <div class="top"><span class="eyebrow">${label}</span>${kind === "agora" || kind === "foco" ? '<span class="pill">AGORA</span>' : ""}</div>
-      <div><h2>${esc(a.title)}</h2>${a.dur ? `<span class="small muted">${fmtDur(a.dur)}</span>` : ""}</div>
-      ${a.min ? `<div class="min"><span class="eyebrow">Travou? Versão mínima</span>${esc(a.min)}</div>` : ""}
+    <div class="now ${kind === "agora" || kind === "foco" ? "live" : ""}">
+      <span class="now-label">${label}</span>
+      <h2>${esc(a.title)}</h2>
+      ${a.dur || a.min ? `<p class="now-meta">${[a.dur ? fmtDur(a.dur) : "", a.min ? `Mínimo: ${esc(a.min)}` : ""].filter(Boolean).join(" · ")}</p>` : ""}
       <div class="row">
-        <button class="btn now" id="now-start" data-id="${a.id}">${action}</button>
-        ${a.min && kind !== "foco" ? `<button class="btn" id="now-min" data-id="${a.id}" style="flex:0 0 auto">Fiz o mínimo</button>` : ""}
+        <button class="btn pri" id="now-start" data-id="${a.id}">${action}</button>
+        ${a.min && kind !== "foco" ? `<button class="btn" id="now-min" data-id="${a.id}">Fiz o mínimo</button>` : ""}
       </div>
     </div>`;
 }
 
 function blockHtml(a, isNow) {
   const st = status(a.id);
-  const cls = ["blk", st === "done" ? "done" : "", st === "min" ? "done min-done" : "", st === "skip" ? "skip" : "", isNow && !st ? "now" : ""].join(" ");
   const sub = st === "min" ? "versão mínima" : st === "skip" ? "pulado" : [a.dur ? fmtDur(a.dur) : "", a.min ? `mín.: ${a.min}` : ""].filter(Boolean).join(" · ");
   return `
-    <div class="${cls}" data-id="${a.id}">
-      <span class="t">${a.time || "—"}</span>
-      <button class="c">
-        <span class="txt"><b>${esc(a.title)}</b>${sub ? `<small>${esc(sub)}</small>` : ""}</span>
-        ${isNow && !st ? '<span class="pill">AGORA</span>' : ""}
-        <span class="chk" role="checkbox" aria-checked="${isDone(st)}" aria-label="Marcar ${esc(a.title)}">${ICON.check}</span>
+    <div class="row-item ${isDone(st) ? "is-done" : ""} ${st === "min" ? "is-min" : ""} ${st === "skip" ? "is-skip" : ""} ${isNow && !st ? "is-now" : ""}" data-act="${a.id}">
+      <button class="chk" role="checkbox" aria-checked="${isDone(st)}" aria-label="Marcar ${esc(a.title)}">${ICON.check}</button>
+      <button class="row-body">
+        <span class="row-title">${esc(a.title)}${isNow && !st ? ' <span class="live-dot" aria-label="agora"></span>' : ""}</span>
+        ${sub ? `<span class="row-sub">${esc(sub)}</span>` : ""}
       </button>
+      <span class="row-time">${a.time || ""}</span>
     </div>`;
 }
 
 function openActivity(a) {
   const st = status(a.id);
   const s = sheet(`
-    <div class="sheet-head"><div><span class="eyebrow">${a.time || "Sem horário"}${a.dur ? ` · ${fmtDur(a.dur)}` : ""}</span><h2>${esc(a.title)}</h2></div><button class="icon-btn" data-close aria-label="Fechar">${ICON.close}</button></div>
+    <div class="sheet-head"><span></span><h3>${esc(a.title)}</h3><button class="text-btn strong" data-close>OK</button></div>
+    <p class="muted center">${a.time || "Sem horário"}${a.dur ? ` · ${fmtDur(a.dur)}` : ""}</p>
     ${planHtml(a)}
-    ${a.min ? `<div class="hint"><b>Versão mínima:</b> ${esc(a.min)}</div>` : ""}
-    <div style="display:grid;gap:8px">
-      ${a.link === "espanhol" ? `<button class="btn pri block" data-do="lesson">Abrir lição de espanhol</button>` : ""}
-      ${a.link === "assistir" ? `<button class="btn pri block" data-do="watch">Abrir Assistir</button>` : ""}
+    ${a.min ? `<div class="notice"><b>Versão mínima</b><span>${esc(a.min)}</span></div>` : ""}
+    <div class="stack">
+      ${a.link === "tarefas" ? `<button class="btn pri block" data-do="tasks">Abrir tarefas</button>` : ""}
+      ${a.link === "assistir" ? `<button class="btn pri block" data-do="watch">Abrir vídeos</button>` : ""}
       ${a.dur ? `<button class="btn ${a.link ? "" : "pri"} block" data-do="focus">Começar foco · ${fmtDur(a.dur)}</button>` : ""}
       <div class="row"><button class="btn" data-do="done">Feito</button>${a.min ? `<button class="btn" data-do="min">Fiz o mínimo</button>` : ""}</div>
       <div class="row"><button class="btn ghost" data-do="skip">Pular sem culpa</button>${st ? `<button class="btn ghost" data-do="clear">Desmarcar</button>` : ""}<button class="btn ghost" data-do="edit">Editar</button></div>
@@ -202,7 +193,7 @@ function openActivity(a) {
     const act = b.dataset.do;
     s.close();
     if (act === "focus") openFocus(a);
-    else if (act === "lesson") startLesson(a.id);
+    else if (act === "tasks") go("tarefas");
     else if (act === "watch") go("assistir");
     else if (act === "edit") openEditor(a);
     else if (act === "clear") setStatus(a.id, null);
@@ -221,20 +212,20 @@ export function openFocus(a) {
     const total = Math.max(1, a.dur || 25) * 60000;
     update((s) => (s.focus = { id: a.id, endAt: Date.now() + total, total }));
   }
-  const R = 120, C = 2 * Math.PI * R;
+  const R = 124, C = 2 * Math.PI * R;
   const ov = overlay(`
     <div class="ov-top">
-      <button class="icon-btn" data-x="leave" aria-label="Sair do foco">${ICON.back}</button>
-      <span class="eyebrow">Modo foco</span>
-      <span style="width:40px"></span>
+      <button class="text-btn" data-x="leave">Voltar</button>
+      <span class="ov-title">Foco</span>
+      <span style="width:52px"></span>
     </div>
     <div class="ring">
-      <svg viewBox="0 0 270 270"><circle cx="135" cy="135" r="${R}" fill="none" stroke="var(--line)" stroke-width="14"/><circle id="arc" cx="135" cy="135" r="${R}" fill="none" stroke="var(--now)" stroke-width="14" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>
+      <svg viewBox="0 0 270 270"><circle cx="135" cy="135" r="${R}" fill="none" stroke="var(--fill)" stroke-width="8"/><circle id="arc" cx="135" cy="135" r="${R}" fill="none" stroke="var(--accent)" stroke-width="8" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0"/></svg>
       <div><div class="time" id="time">--:--</div><div class="of" id="of"></div></div>
     </div>
-    <div class="focus-title"><h1>${esc(a.title)}</h1></div>
-    <p class="timeup" id="timeup" hidden>Tempo! Concluir ou mais 5 min?</p>
-    ${a.min ? `<div class="hint"><span class="eyebrow" style="color:var(--accent)">Travou? Versão mínima</span><br>${esc(a.min)}</div>` : ""}
+    <h1 class="center">${esc(a.title)}</h1>
+    <p class="timeup" id="timeup" hidden>Tempo! Concluir ou mais 5 minutos?</p>
+    ${a.min ? `<div class="notice"><b>Travou? Versão mínima</b><span>${esc(a.min)}</span></div>` : ""}
     ${planHtml(a)}
     <div class="focus-actions">
       <button class="btn pri block" data-x="done">Concluir</button>
@@ -257,19 +248,6 @@ export function openFocus(a) {
   const timer = setInterval(tick, 1000);
   navigator.wakeLock?.request("screen").then((l) => (wakeLock = l)).catch(() => {});
 
-  const finish = (st) => {
-    clearInterval(timer);
-    wakeLock?.release?.().catch(() => {});
-    wakeLock = null;
-    if (st) {
-      update((s) => {
-        s.focus = null;
-        if (st !== "leave") dayLog().a[a.id] = st;
-      });
-    }
-    ov.close();
-  };
-
   ov.el.addEventListener("click", (e) => {
     const b = e.target.closest("[data-x]");
     if (!b) return;
@@ -285,8 +263,12 @@ export function openFocus(a) {
       tick();
       return;
     }
-    if (x === "leave") { clearInterval(timer); ov.close(); go(); return; }
-    finish(x);
+    clearInterval(timer);
+    wakeLock?.release?.().catch(() => {});
+    wakeLock = null;
+    if (x === "leave") { ov.close(); go(); return; }
+    update((s) => { s.focus = null; dayLog().a[a.id] = x; });
+    ov.close();
     const next = activitiesOn(dayKey()).find((n) => !status(n.id) && n.id !== a.id && n.time && toMin(n.time) >= toMin(a.time || "00:00"));
     toast(x === "skip" ? "Pulado. Sem culpa." : next ? `Feito. Próximo: ${next.title} às ${next.time}` : "Feito!");
   });
@@ -307,40 +289,37 @@ export function renderHabitos(root) {
       <button class="icon-btn" id="new" aria-label="Nova atividade">${ICON.plus}</button>
     </header>
 
-    <div class="card" style="display:grid;gap:8px">
-      <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-        <span class="big">${pct === null ? "—" : pct + "%"}</span>
-        <span class="muted">${pct === null ? "Marque o que fizer hoje para começar a medir." : "dos dias planejados cumpridos"}</span>
+    <div class="score">
+      <span class="big${pct === null ? " muted" : ""}">${pct === null ? "0%" : pct + "%"}</span>
+      <span class="muted">${pct === null ? "Marque o que fizer hoje para começar a medir." : "dos dias planejados cumpridos"}</span>
+      <p class="small muted">Sem sequência que zera. O que importa é não perder dois dias seguidos.</p>
+    </div>
+
+    <section class="group">
+      <div class="group-head"><h2 class="group-title">Atividades</h2>
+        <div class="legend"><span><i class="y"></i>feito</span><span><i class="m"></i>mínimo</span><span><i class="x"></i>não feito</span></div>
       </div>
-      <p class="small muted">Sem sequência que zera. Um dia perdido não apaga nada; o que importa é não perder dois seguidos.</p>
-    </div>
-
-    <div class="legend">
-      <span><i style="background:var(--good)"></i>feito</span>
-      <span><i style="background:var(--accent)"></i>versão mínima</span>
-      <span><i style="background:var(--line)"></i>não feito</span>
-    </div>
-
-    <div class="section">
-      <div class="days-lbl">${last7.map((k) => `<span>${WD[weekday(k)]}</span>`).join("")}</div>
-      ${acts.map((a) => {
-        const c = consistency(a);
-        return `
-          <button class="hab" data-id="${a.id}">
-            <div class="top"><b>${a.time ? `<span class="mono muted" style="font-weight:500">${a.time}</span> ` : ""}${esc(a.title)}</b><span class="pct">${c.pct === null ? "novo" : c.pct + "%"}</span></div>
-            <div class="days">${last7.map((k) => {
-              const st = S.log[k]?.a?.[a.id];
-              const planned = a.days.includes(weekday(k)) && (!a.created || a.created <= k);
-              let cls = "";
-              if (st === "done") cls = "y";
-              else if (st === "min") cls = "m";
-              else if (planned && k < today) cls = "x";
-              if (k === today && planned) cls += " today";
-              return `<i class="${cls}"></i>`;
-            }).join("")}</div>
-          </button>`;
-      }).join("")}
-    </div>
+      <div class="list">
+        <div class="days-head"><span></span><div class="days-lbl">${last7.map((k) => `<span>${WD[weekday(k)]}</span>`).join("")}</div></div>
+        ${acts.map((a) => {
+          const c = consistency(a);
+          return `
+            <button class="hab" data-id="${a.id}">
+              <span class="hab-name"><span class="row-title">${esc(a.title)}</span><span class="row-sub">${a.time || "sem horário"} · ${c.pct === null ? "novo" : c.pct + "%"}</span></span>
+              <span class="days">${last7.map((k) => {
+                const st = S.log[k]?.a?.[a.id];
+                const planned = a.days.includes(weekday(k)) && (!a.created || a.created <= k);
+                let cls = planned ? "p" : "";
+                if (st === "done") cls = "y";
+                else if (st === "min") cls = "m";
+                else if (planned && k < today) cls = "x";
+                if (k === today && planned) cls += " today";
+                return `<i class="${cls}"></i>`;
+              }).join("")}</span>
+            </button>`;
+        }).join("")}
+      </div>
+    </section>
 
     <button class="btn pri block" id="new2">Nova atividade</button>
   `;
@@ -355,36 +334,37 @@ export function openEditor(a) {
   const v = a || { title: "", time: "", dur: 25, days: [1, 2, 3, 4, 5], min: "", when: "", then: "", ifObs: "", thenObs: "", link: "" };
   const days = new Set(v.days);
   const s = sheet(`
-    <div class="sheet-head"><h2>${isNew ? "Nova atividade" : "Editar atividade"}</h2><button class="icon-btn" data-close aria-label="Fechar">${ICON.close}</button></div>
-    <div class="field"><label for="f-title">Nome</label><input class="input" id="f-title" value="${esc(v.title)}" placeholder="Ex.: Estudar matemática"></div>
-    <div class="grid2">
-      <div class="field"><label for="f-time">Horário</label><input class="input" id="f-time" type="time" value="${esc(v.time)}"></div>
-      <div class="field"><label for="f-dur">Duração (min)</label><input class="input" id="f-dur" type="number" inputmode="numeric" min="0" max="600" value="${v.dur}"></div>
+    <div class="sheet-head"><button class="text-btn" data-close>Cancelar</button><h3>${isNew ? "Nova atividade" : "Editar"}</h3><button class="text-btn strong" id="f-save">${isNew ? "Criar" : "Salvar"}</button></div>
+    <div class="form-group">
+      <input class="input bare" id="f-title" value="${esc(v.title)}" placeholder="Nome (ex.: Estudar matemática)">
     </div>
-    <div class="field"><span class="lbl">Dias</span><div class="chips wrap" id="f-days">${WD.map((l, i) => `<button class="chip" data-d="${i}" aria-pressed="${days.has(i)}" aria-label="${WD_LONG[i]}">${l}</button>`).join("")}</div></div>
-    <div class="field"><label for="f-min">Versão mínima (o que conta como feito num dia ruim)</label><input class="input" id="f-min" value="${esc(v.min)}" placeholder="Ex.: Fazer 1 exercício"></div>
-    <div class="ifthen">
-      <span class="eyebrow">Gatilho</span>
-      <span class="w">Quando eu</span><input class="input" id="f-when" value="${esc(v.when)}" placeholder="terminar o café">
-      <span class="w">eu vou</span><input class="input" id="f-then" value="${esc(v.then)}" placeholder="sentar na mesa e abrir o caderno">
+    <div class="form-group">
+      <label class="form-row"><span>Horário</span><input class="input inline" id="f-time" type="time" value="${esc(v.time)}"></label>
+      <label class="form-row"><span>Duração (min)</span><input class="input inline" id="f-dur" type="number" inputmode="numeric" min="0" max="600" value="${v.dur}"></label>
     </div>
-    <div class="ifthen">
-      <span class="eyebrow">Obstáculo provável</span>
-      <span class="w">Se eu</span><input class="input" id="f-ifobs" value="${esc(v.ifObs)}" placeholder="pegar o celular">
-      <span class="w">então</span><input class="input" id="f-thenobs" value="${esc(v.thenObs)}" placeholder="deixo o celular em outra sala">
+    <div class="field"><span class="lbl">Dias</span><div class="days-pick" id="f-days">${WD.map((l, i) => `<button class="day" data-d="${i}" aria-pressed="${days.has(i)}" aria-label="${WD_LONG[i]}">${l}</button>`).join("")}</div></div>
+    <div class="field"><span class="lbl">Versão mínima (o que conta como feito num dia ruim)</span><div class="form-group"><input class="input bare" id="f-min" value="${esc(v.min)}" placeholder="Ex.: Fazer 1 exercício"></div></div>
+    <div class="field"><span class="lbl">Plano</span>
+      <div class="form-group plan-form">
+        <label class="form-row"><span class="w">Quando eu</span><input class="input inline wide" id="f-when" value="${esc(v.when)}" placeholder="terminar o café"></label>
+        <label class="form-row"><span class="w">eu vou</span><input class="input inline wide" id="f-then" value="${esc(v.then)}" placeholder="abrir o caderno"></label>
+        <label class="form-row"><span class="w">Se eu</span><input class="input inline wide" id="f-ifobs" value="${esc(v.ifObs)}" placeholder="pegar o celular"></label>
+        <label class="form-row"><span class="w">então</span><input class="input inline wide" id="f-thenobs" value="${esc(v.thenObs)}" placeholder="deixo em outra sala"></label>
+      </div>
     </div>
-    <div class="field"><label for="f-link">Atalho ao tocar</label>
-      <select class="input" id="f-link">
-        <option value="" ${!v.link ? "selected" : ""}>Modo foco com timer</option>
-        <option value="espanhol" ${v.link === "espanhol" ? "selected" : ""}>Abrir lição de espanhol</option>
-        <option value="assistir" ${v.link === "assistir" ? "selected" : ""}>Abrir vídeos</option>
-      </select>
+    <div class="form-group">
+      <label class="form-row"><span>Ao tocar</span>
+        <select class="input inline" id="f-link">
+          <option value="" ${!v.link ? "selected" : ""}>Modo foco</option>
+          <option value="tarefas" ${v.link === "tarefas" ? "selected" : ""}>Abrir tarefas</option>
+          <option value="assistir" ${v.link === "assistir" ? "selected" : ""}>Abrir vídeos</option>
+        </select>
+      </label>
     </div>
-    <button class="btn pri block" id="f-save">${isNew ? "Criar" : "Salvar"}</button>
     ${isNew ? "" : `<button class="btn ghost danger block" id="f-del">Apagar atividade</button>`}
   `);
   const el = s.el;
-  $$("#f-days .chip", el).forEach((c) => (c.onclick = () => {
+  $$("#f-days .day", el).forEach((c) => (c.onclick = () => {
     const d = Number(c.dataset.d);
     days.has(d) ? days.delete(d) : days.add(d);
     c.setAttribute("aria-pressed", days.has(d));

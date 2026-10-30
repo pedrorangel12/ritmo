@@ -1,5 +1,5 @@
 // Seleção inicial de vídeos longos. Pesquisados no YouTube em 30/10/2026.
-// t: tema (historia | filosofia | ciencia | geopolitica), l: idioma (pt | es), d: duração em minutos.
+// t: tema (historia | filosofia | ciencia | geopolitica), d: duração em minutos.
 export const VIDEOS = [
   // História
   { id: "fM1CyZ372qQ", t: "historia", l: "pt", d: 59, c: "Foca na História", title: "O Egito Antigo: a história completa" },
@@ -58,18 +58,6 @@ export const VIDEOS = [
   { id: "M0grDiOLxwg", t: "geopolitica", l: "pt", d: 44, c: "Ricardo Marcílio", title: "Oriente Médio (aula completa)" },
   { id: "LmShtQMtciI", t: "geopolitica", l: "pt", d: 60, c: "Canal Nostalgia", title: "Entenda a guerra entre Rússia e Ucrânia" },
   { id: "5MjgVTeXEr8", t: "geopolitica", l: "pt", d: 43, c: "AUVP Capital", title: "A China vai superar os Estados Unidos?" },
-
-  // Em espanhol (contam como prática de escuta)
-  { id: "rZfXv-7leqQ", t: "historia", l: "es", d: 28, c: "Academia Play", title: "La caída del Imperio romano" },
-  { id: "n-Z-OicdtI8", t: "historia", l: "es", d: 22, c: "Academia Play", title: "Gladiadores en la Antigua Roma" },
-  { id: "8JjM_7IgEss", t: "historia", l: "es", d: 23, c: "Academia Play", title: "El Sacro Imperio Romano Germánico" },
-  { id: "UtTMIPSc7kE", t: "historia", l: "es", d: 135, c: "Pero eso es otra Historia", title: "Antigua Roma: toda su historia" },
-  { id: "1VU2Pglbd4I", t: "historia", l: "es", d: 70, c: "Pero eso es otra Historia", title: "Historia de España (parte 1)" },
-  { id: "eWeEoglVbhk", t: "filosofia", l: "es", d: 41, c: "Academia Play", title: "Occidente = Grecia + Roma + Cristianismo" },
-  { id: "DkcEAz09Buo", t: "ciencia", l: "es", d: 21, c: "QuantumFracture", title: "¿Qué es la luz?" },
-  { id: "wZCWNLLpmZQ", t: "ciencia", l: "es", d: 21, c: "QuantumFracture", title: "El bosón de Higgs explicado a fondo" },
-  { id: "iYfIL6Xaa7o", t: "ciencia", l: "es", d: 28, c: "QuantumFracture", title: "Energía oscura" },
-  { id: "fGVSY0ZRGts", t: "ciencia", l: "es", d: 26, c: "QuantumFracture", title: "¿El espacio es una ilusión?" },
 ];
 
 export const TOPICS = {

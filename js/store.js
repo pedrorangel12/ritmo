@@ -40,7 +40,7 @@ function seedActivities(today) {
     }),
     a("Pausa sem celular", "08:50", 10, { days: WEEKDAYS, min: "Olhar pela janela 2 min" }),
     a("Treino", "18:00", 45, { days: [1, 3, 5], min: "10 minutos de caminhada", when: "chegar em casa", then: "trocar de roupa na hora" }),
-    a("Espanhol", "21:00", 10, { min: "Uma lição de 5 min", link: "espanhol", when: "jantar", then: "abrir o Ritmo em vez do Instagram" }),
+    a("Planejar amanhã", "21:00", 10, { min: "Anotar 1 tarefa para amanhã", link: "tarefas", when: "jantar", then: "abrir o Ritmo em vez do Instagram" }),
     a("Ler sem tela", "22:15", 20, { min: "Ler 2 páginas", ifObs: "quiser rolar o feed", thenObs: "abro a aba Assistir ou o livro" }),
     a("Dormir", "23:00", 0, { min: "Celular fora da cama" }),
   ];
@@ -54,15 +54,20 @@ function fresh() {
     activities: seedActivities(today),
     log: {},           // { "AAAA-MM-DD": { a: { id: "done"|"min"|"skip" }, learn: { video: min, es: min } } }
     focus: null,       // { id, endAt, total }
+    tasks: [],         // { id, title, date: "AAAA-MM-DD" | "", time: "HH:MM" | "", note, done: timestamp | null, created }
     watch: { seen: {}, saved: {}, notes: {}, custom: [] },
-    es: { cards: {}, newPerDay: 8, xp: 0 },
   };
 }
 
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return { ...fresh(), ...JSON.parse(raw) };
+    if (raw) {
+      const s = { ...fresh(), ...JSON.parse(raw) };
+      delete s.es;
+      s.activities.forEach((a) => { if (a.link === "espanhol") a.link = ""; });
+      return s;
+    }
   } catch (e) { /* armazenamento indisponível: começa do zero */ }
   return fresh();
 }

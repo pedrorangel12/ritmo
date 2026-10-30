@@ -12,13 +12,8 @@ export function openSettings() {
       <span class="k">${ICON.spark}</span><span style="display:grid;gap:2px"><b>Travar Instagram e TikTok</b><span>Desvio para o Ritmo e limite diário, passo a passo</span></span>
     </button>
     <button class="tile wide" data-open="cal" style="grid-template-columns:auto 1fr;align-items:center;column-gap:12px">
-      <span class="k">${ICON.book}</span><span style="display:grid;gap:2px"><b>Lembretes no horário</b><span>Manda a rotina para o Calendário do iPhone, com aviso</span></span>
+      <span class="k">${ICON.book}</span><span style="display:grid;gap:2px"><b>Lembretes no horário</b><span>Manda rotina e tarefas para o Calendário do iPhone, com aviso</span></span>
     </button>
-
-    <div class="card" style="display:grid;gap:10px">
-      <b>Espanhol: palavras novas por dia</b>
-      <div class="chips wrap">${[3, 5, 8, 12].map((n) => `<button class="chip" data-new="${n}" aria-pressed="${S.es.newPerDay === n}">${n}</button>`).join("")}</div>
-    </div>
 
     <div class="card" style="display:grid;gap:10px">
       <b>Backup</b>
@@ -33,11 +28,6 @@ export function openSettings() {
     <button class="btn ghost danger block" id="reset">Apagar tudo e recomeçar</button>
   `);
   const el = s.el;
-
-  $$("[data-new]", el).forEach((c) => (c.onclick = () => {
-    update((st) => (st.es.newPerDay = Number(c.dataset.new)));
-    $$("[data-new]", el).forEach((x) => x.setAttribute("aria-pressed", x === c));
-  }));
 
   $("[data-open=block]", el).onclick = () => { s.close(); openBlockGuide(); };
   $("[data-open=cal]", el).onclick = () => { s.close(); openCalendar(); };
@@ -133,22 +123,44 @@ function buildIcs() {
       "END:VEVENT",
     );
   });
+  S.tasks.filter((t) => !t.done && t.date && t.date >= today).forEach((t) => lines.push(...taskEvent(t, stamp)));
   lines.push("END:VCALENDAR");
   return lines.join("\r\n");
 }
 
+// Evento de uma tarefa: com horário avisa na hora; sem horário, vira evento do dia com aviso às 9h.
+function taskEvent(t, stamp) {
+  const d = t.date.replace(/-/g, "");
+  return [
+    "BEGIN:VEVENT",
+    `UID:ritmo-tarefa-${t.id}@ritmo.app`,
+    `DTSTAMP:${stamp}`,
+    ...(t.time ? [`DTSTART:${d}T${t.time.replace(":", "")}00`, "DURATION:PT15M"] : [`DTSTART;VALUE=DATE:${d}`]),
+    `SUMMARY:${icsEscape(t.title)}`,
+    ...(t.note ? [`DESCRIPTION:${icsEscape(t.note)}`] : []),
+    "BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${icsEscape(t.title)}`, `TRIGGER:${t.time ? "PT0M" : "PT9H"}`, "END:VALARM",
+    "END:VEVENT",
+  ];
+}
+
+export function taskIcsHref(t) {
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "");
+  const ics = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Ritmo//PT-BR", ...taskEvent(t, stamp), "END:VCALENDAR"].join("\r\n");
+  return "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
+}
+
 function openCalendar() {
-  const count = S.activities.filter((a) => a.time).length;
+  const count = S.activities.filter((a) => a.time).length + S.tasks.filter((t) => !t.done && t.date && t.date >= dayKey()).length;
   const href = "data:text/calendar;charset=utf-8," + encodeURIComponent(buildIcs());
   sheet(`
     <div class="sheet-head"><div><span class="eyebrow">Avisos na hora certa</span><h2>Lembretes no Calendário</h2></div><button class="icon-btn" data-close aria-label="Fechar">${ICON.close}</button></div>
-    <p class="muted">O iPhone não deixa um app web avisar no horário sozinho. Então o Ritmo manda a rotina para o Calendário, que avisa no começo de cada atividade e se repete toda semana.</p>
+    <p class="muted">O iPhone não deixa um app web avisar no horário sozinho. Então o Ritmo manda a rotina e as tarefas para o Calendário, que avisa na hora. A rotina se repete toda semana.</p>
     <ol class="steps">
-      <li>Toque em <b>Enviar ${count} atividades</b>.</li>
+      <li>Toque em <b>Enviar ${count} lembretes</b> (rotina e tarefas com data).</li>
       <li>O iPhone mostra os eventos: toque em <b>Adicionar Tudo</b>.</li>
       <li>Para não misturar com outros eventos, escolha (ou crie) um calendário chamado <b>Ritmo</b>.</li>
     </ol>
-    <p class="small muted">Mudou a rotina? Apague o calendário Ritmo no app Calendário e envie de novo.</p>
-    <a class="btn pri block" href="${esc(href)}" download="ritmo.ics">Enviar ${count} atividades</a>
+    <p class="small muted">Mudou a rotina? Apague o calendário Ritmo no app Calendário e envie de novo. Para uma tarefa só, abra a tarefa e toque em Lembrete no Calendário.</p>
+    <a class="btn pri block" href="${esc(href)}" download="ritmo.ics">Enviar ${count} lembretes</a>
   `);
 }
